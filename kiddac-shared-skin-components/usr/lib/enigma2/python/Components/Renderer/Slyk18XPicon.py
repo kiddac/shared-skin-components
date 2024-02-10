@@ -6,11 +6,11 @@ from ServiceReference import ServiceReference
 from Tools.Alternatives import GetWithAlternative
 from Tools.Directories import SCOPE_CURRENT_SKIN, resolveFilename
 from PIL import Image, ImageFile, PngImagePlugin
+from unicodedata import normalize
 
 import glob
 import os
 import re
-import unicodedata
 import string
 import sys
 
@@ -177,9 +177,9 @@ def getPiconName(serviceName):
         name = ServiceReference(serviceName).getServiceName()  # Picon by channel name
 
         if pythonVer == 2:
-            name = unicodedata.normalize("NFKD", unicode(name, "utf_8", errors="ignore")).encode("ASCII", "ignore")
+            name = normalize("NFKD", unicode(name, "utf_8", errors="ignore")).encode("ASCII", "ignore")
         elif pythonVer == 3:
-            name = unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode()
+            name = normalize("NFKD", name).encode("ASCII", "ignore").decode()
 
         name = re.sub("[^a-z0-9]", "", name.replace("&", "and").replace("+", "plus").replace("*", "star").lower())
         if name:
