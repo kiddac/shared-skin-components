@@ -1,25 +1,27 @@
-from __future__ import absolute_import
 
+from enigma import ePixmap  # , ePicLoad
 from Components.Harddisk import harddiskmanager
 from Components.Renderer.Renderer import Renderer
-from enigma import ePixmap, ePicLoad
 from ServiceReference import ServiceReference
-from PIL import Image, ImageFile, PngImagePlugin
 from Tools.Alternatives import GetWithAlternative
-from Tools.Directories import pathExists, SCOPE_ACTIVE_SKIN, resolveFilename
+from Tools.Directories import SCOPE_CURRENT_SKIN, resolveFilename
+from PIL import Image, ImageFile, PngImagePlugin
 
-import string
 import glob
-import sys
 import os
 import re
 import unicodedata
+import string
+import sys
 
 _simple_palette = re.compile(b"^\xff*\x00\xff*$")
 
 pythonVer = 2
 if sys.version_info.major == 3:
     pythonVer = 3
+
+if pythonVer == 3:
+    unicode = str
 
 
 searchPaths = []
@@ -34,14 +36,14 @@ if not os.path.exists("/tmp/temppicons"):
 def patched_chunk_tRNS(self, pos, len):
     i16 = PngImagePlugin.i16
     s = ImageFile._safe_read(self.fp, len)
-    if self.im_mode == 'P':
+    if self.im_mode == "P":
         i = string.find(s, chr(0))
         if i >= 0:
             self.im_info["transparency"] = map(ord, s)
-    elif self.im_mode == 'L':
-        self.im_info['transparency'] = i16(s)
-    elif self.im_mode == 'RGB':
-        self.im_info['transparency'] = (i16(s), i16(s[2:]), i16(s[4:]))
+    elif self.im_mode == "L":
+        self.im_info["transparency"] = i16(s)
+    elif self.im_mode == "RGB":
+        self.im_info["transparency"] = (i16(s), i16(s[2:]), i16(s[4:]))
     return s
 
 
@@ -74,6 +76,7 @@ def mycall(self, cid, pos, length):
 
 
 def mychunk_TRNS(self, pos, length):
+    i16 = PngImagePlugin.i16
     s = ImageFile._safe_read(self.fp, length)
     if self.im_mode == "P":
         if _simple_palette.match(s):
@@ -100,19 +103,21 @@ else:
 def initPiconPaths():
     global searchPaths
     searchPaths = []
-    for mp in ('/usr/share/enigma2/', '/'):
+    for mp in ("/usr/share/enigma2/", "/"):
         onMountpointAdded(mp)
     for part in harddiskmanager.getMountedPartitions():
+        mp = os.path.join(part.mountpoint, "usr/share/enigma2")
         onMountpointAdded(part.mountpoint)
+        onMountpointAdded(mp)
 
 
 def onMountpointAdded(mountpoint):
     global searchPaths
     try:
-        path = os.path.join(mountpoint, 'XPicons') + '/'
+        path = os.path.join(mountpoint, "XPicons", "")
         if os.path.isdir(path) and path not in searchPaths:
             for fn in os.listdir(path):
-                if fn.endswith('.png'):
+                if fn.endswith(".png"):
                     print("[Picon] adding path:", path)
                     searchPaths.append(path)
                     break
@@ -122,7 +127,7 @@ def onMountpointAdded(mountpoint):
 
 def onMountpointRemoved(mountpoint):
     global searchPaths
-    path = os.path.join(mountpoint, 'XPicons') + '/'
+    path = os.path.join(mountpoint, "XPicons", "")
     try:
         searchPaths.remove(path)
         print("[Picon] removed path:", path)
@@ -131,9 +136,9 @@ def onMountpointRemoved(mountpoint):
 
 
 def onPartitionChange(why, part):
-    if why == 'add':
+    if why == "add":
         onMountpointAdded(part.mountpoint)
-    elif why == 'remove':
+    elif why == "remove":
         onMountpointRemoved(part.mountpoint)
 
 
@@ -141,79 +146,68 @@ def findPicon(serviceName):
     global lastPiconPath
     if lastPiconPath is not None:
         pngname = lastPiconPath + serviceName + ".png"
-        if pathExists(pngname):
-            return pngname
-        else:
-            return ""
+        return pngname if os.path.exists(pngname) else ""
     else:
         global searchPaths
         pngname = ""
         for path in searchPaths:
-            if pathExists(path) and not path.startswith('/media/net') and not path.startswith('/media/autofs'):
+            if os.path.exists(path) and not path.startswith("/media/net"):
                 pngname = path + serviceName + ".png"
-                if pathExists(pngname):
+                if os.path.exists(pngname):
                     lastPiconPath = path
-                    break
-            elif pathExists(path):
-                pngname = path + serviceName + ".png"
-                if pathExists(pngname):
-                    lastPiconPath = path
-                    break
-        if pathExists(pngname):
-            return pngname
-        else:
-            return ""
+                    return pngname
+        return ""
 
 
 def getPiconName(serviceName):
-    # remove the path and name fields, and replace ':' by '_'
-    fields = GetWithAlternative(serviceName).split(':', 10)[:10]
+    fields = GetWithAlternative(serviceName).split(":", 10)[:10]  # Remove the path and name fields, and replace ":" by "_"
     if not fields or len(fields) < 10:
         return ""
-    pngname = findPicon('_'.join(fields))
+    pngname = findPicon("_".join(fields))
     if not pngname and not fields[6].endswith("0000"):
-        # remove "sub-network" from namespace
-        fields[6] = fields[6][:-4] + "0000"
-        pngname = findPicon('_'.join(fields))
-    if not pngname and fields[0] != '1':
-        # fallback to 1 for IPTV streams
-        fields[0] = '1'
-        pngname = findPicon('_'.join(fields))
-    if not pngname and fields[2] != '2':
-        # fallback to 1 for TV services with non-standard service types
-        fields[2] = '1'
-        pngname = findPicon('_'.join(fields))
-    if not pngname:  # picon by channel name
-        name = ServiceReference(serviceName).getServiceName()
+        fields[6] = fields[6][:-4] + "0000"  # Remove "sub-network" from namespace
+        pngname = findPicon("_".join(fields))
+    if not pngname and fields[0] != "1":
+        fields[0] = "1"  # Fallback to 1 for other reftypes
+        pngname = findPicon("_".join(fields))
+    if not pngname and fields[2] != "1":
+        fields[2] = "1"  # Fallback to 1 for services with different service types
+        pngname = findPicon("_".join(fields))
+    if not pngname:
+        name = ServiceReference(serviceName).getServiceName()  # Picon by channel name
+
         if pythonVer == 2:
-            name = unicodedata.normalize('NFKD', unicode(name, 'utf_8', errors='ignore')).encode('ASCII', 'ignore')
+            name = unicodedata.normalize("NFKD", unicode(name, "utf_8", errors="ignore")).encode("ASCII", "ignore")
         elif pythonVer == 3:
-            name = unicodedata.normalize('NFKD', name).encode('ASCII', 'ignore').decode('ascii')
-        name = re.sub('[^a-z0-9]', '', name.replace('&', 'and').replace('+', 'plus').replace('*', 'star').lower())
-        if len(name) > 0:
+            name = unicodedata.normalize("NFKD", name).encode("ASCII", "ignore").decode()
+
+        name = re.sub("[^a-z0-9]", "", name.replace("&", "and").replace("+", "plus").replace("*", "star").lower())
+        if name:
             pngname = findPicon(name)
-            if not pngname and len(name) > 2 and name.endswith('hd'):
-                pngname = findPicon(name[:-2])
+            if not pngname:
+                name = re.sub("(fhd|uhd|hd|sd|4k)$", "", name)
+                if name:
+                    pngname = findPicon(name)
     return pngname
 
 
 class Slyk18XPicon(Renderer):
+    GUI_WIDGET = ePixmap
 
     def __init__(self):
         Renderer.__init__(self)
-        self.PicLoad = ePicLoad()
-        self.PicLoad.PictureData.get().append(self.updatePicon)
+        # self.PicLoad = ePicLoad()
+        # self.PicLoad.PictureData.get().append(self.updatePicon)
         self.piconsize = (0, 0)
         self.pngname = ""
         self.lastPath = None
-        pngname = findPicon("picon_default")
-        self.defaultpngname = resolveFilename(SCOPE_ACTIVE_SKIN, "picon_default.png")
 
+        self.defaultpngname = resolveFilename(SCOPE_CURRENT_SKIN, "picon_default.png")
+            
     def addPath(self, value):
-        if pathExists(value):
+        if os.path.exists(value):
             global searchPaths
-            if not value.endswith('/'):
-                value += '/'
+            value = os.path.join(value, "")
             if value not in searchPaths:
                 searchPaths.append(value)
 
@@ -228,55 +222,64 @@ class Slyk18XPicon(Renderer):
         self.skinAttributes = attribs
         return Renderer.applySkin(self, desktop, parent)
 
-    GUI_WIDGET = ePixmap
-
     def postWidgetCreate(self, instance):
         self.changed((self.CHANGED_DEFAULT,))
 
-    def updatePicon(self, picInfo=None):
-        ptr = self.PicLoad.getData()
-        if ptr is not None:
-            self.instance.setPixmap(ptr.__deref__())
-            self.instance.show()
+    # def updatePicon(self, picInfo=None):
+    #    ptr = self.PicLoad.getData()
+    #     if ptr is not None:
+    #       self.instance.setPixmap(ptr.__deref__())
+    #        self.instance.show()
 
     def changed(self, what):
         if self.instance:
             pngname = ""
             if what[0] == 1 or what[0] == 3:
                 pngname = getPiconName(self.source.text)
+
                 if pngname:
                     tempname = pngname.replace(lastPiconPath, "")
-                if not pathExists(pngname):  # no picon for service found
+                if not os.path.exists(pngname):  # no picon for service found
                     pngname = self.defaultpngname
+
                 if self.pngname != pngname:
-                    try:
-                        if pngname != self.defaultpngname:
-                            try:
-                                im = Image.open(pngname).convert('RGBA').resize((self.piconsize), Image.Resampling.LANCZOS).save("/tmp/temppicons/" + str(tempname), "PNG")
-                            except:
-                                im = Image.open(pngname).convert('RGBA').resize((self.piconsize), Image.ANTIALIAS).save("/tmp/temppicons/" + str(tempname), "PNG")
-                            self.instance.setScale(1)
-                            self.instance.setPixmapFromFile("/tmp/temppicons/" + str(tempname))
-                            self.instance.show()
-                        elif pngname == self.defaultpngname:
-                            try:
-                                im = Image.open(pngname).convert('RGBA').resize((self.piconsize), Image.Resampling.LANCZOS).save("/tmp/temppicons/" + "picon_default.png", "PNG")
-                            except:
-                                im = Image.open(pngname).convert('RGBA').resize((self.piconsize), Image.ANTIALIAS).save("/tmp/temppicons/" + "picon_default.png", "PNG")
-                            self.instance.setScale(1)
-                            self.instance.setPixmapFromFile("/tmp/temppicons/picon_default.png")
-                            self.instance.show()
-                        else:
-                            self.instance.hide()
-                    except Exception as e:
-                        print(e)
-                        print("[Picon] Bad picon file?: %s" % pngname)
-                        return
+                    if pngname:
+
+                        try:
+                            if pngname != self.defaultpngname:
+                                try:
+                                    Image.open(pngname).convert("RGBA").resize((self.piconsize), Image.Resampling.LANCZOS).save("/tmp/temppicons/" + str(tempname), "PNG")
+                                except:
+                                    Image.open(pngname).convert("RGBA").resize((self.piconsize), Image.ANTIALIAS).save("/tmp/temppicons/" + str(tempname), "PNG")
+                                self.instance.setScale(1)
+                                self.instance.setPixmapFromFile("/tmp/temppicons/" + str(tempname))
+                                self.instance.show()
+                            elif pngname == self.defaultpngname:
+                                try:
+                                    Image.open(pngname).convert("RGBA").resize((self.piconsize), Image.Resampling.LANCZOS).save("/tmp/temppicons/" + "picon_default.png", "PNG")
+                                except:
+                                    Image.open(pngname).convert("RGBA").resize((self.piconsize), Image.ANTIALIAS).save("/tmp/temppicons/" + "picon_default.png", "PNG")
+                                self.instance.setScale(1)
+                                self.instance.setPixmapFromFile("/tmp/temppicons/picon_default.png")
+                                self.instance.show()
+
+                        except Exception as e:
+                            print(e)
+                            print("[Picon] Bad picon file?: %s" % pngname)
+                            return
+
+                    else:
+                        self.instance.hide()
+                    self.pngname = pngname
+
                     self.pngname = pngname
                     # delete any existing pngs
-                    if os.path.exists('/tmp/temppicons'):
-                        for filename in glob.glob('/tmp/temppicons/*.png'):
+                    if os.path.exists("/tmp/temppicons"):
+                        for filename in glob.glob("/tmp/temppicons/*.png"):
                             os.remove(filename)
+            elif what[0] == 2:
+                self.pngname = ""
+                self.instance.hide()
 
 
 harddiskmanager.on_partition_list_change.append(onPartitionChange)
