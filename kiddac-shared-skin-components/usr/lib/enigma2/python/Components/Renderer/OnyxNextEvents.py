@@ -1,9 +1,10 @@
 from __future__ import absolute_import
-from Components.VariableText import VariableText
-from Components.Renderer.Renderer import Renderer
-from enigma import eLabel, eEPGCache
-from time import localtime
 
+from time import localtime
+from enigma import eLabel, eEPGCache
+
+from Components.Renderer.Renderer import Renderer
+from Components.VariableText import VariableText
 
 class OnyxNextEvents(VariableText, Renderer):
 
