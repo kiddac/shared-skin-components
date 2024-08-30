@@ -89,7 +89,6 @@ class Slyk18ServicePosition(Poll, Converter, object):
 
     @cached
     def getLength(self):
-        print("*** getlength ***")
         seek = self.getSeek()
         if seek is None:
             return None
