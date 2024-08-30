@@ -1,16 +1,16 @@
 from __future__ import absolute_import, division
 from Components.Converter.Converter import Converter
-from Components.Sources.Clock import Clock
 from time import time as getTime, localtime, strftime
 from Components.Converter.Poll import Poll
 from enigma import iPlayableService
-from Components.Element import cached, ElementError
+from Components.Element import cached
 from Components.config import config
 
 import os.path
 
 
 # Remaining = sign / %d Min / %d Mins
+# Remaining2 = remaining as seconds and mins
 # Position = sign / %d Min" / %d Mins
 # MovieRemaining = %d Min / %d Mins
 # MovieLength = %ds / %dm / &dh / %dh / %dh %dm
@@ -21,7 +21,7 @@ import os.path
 hours24 = True
 filename = '/usr/share/enigma2/slyk-common/timeformat.txt'
 
-if config.osd.language.value == "en_GB" or config.osd.language.value == "en_US" or config.osd.language.value == "en_AU":
+if config.osd.language.value in ("en_GB", "en_US", "en_AU"):
     hours24 = False
 
 if os.path.exists(filename):
@@ -32,15 +32,15 @@ if os.path.exists(filename):
 
 class Slyk18ServicePosition(Poll, Converter, object):
     TYPE_LENGTH = 0
-    TYPE_POSITION = 1
-    TYPE_REMAINING = 2
-    TYPE_GAUGE = 3
-    TYPE_MOVIEREMAINING = 4
-    TYPE_MOVIELENGTH = 5
-    TYPE_MOVIEPOSITION = 6
-    TYPE_TIMESHIFTSTART = 7
-    TYPE_TIMESHIFTPOSITION = 8
-    TYPE_REMAINING2 = 9
+    TYPE_GAUGE = 1
+    TYPE_POSITION = 2
+    TYPE_REMAINING = 3
+    TYPE_REMAINING2 = 4
+    TYPE_MOVIEREMAINING = 5
+    TYPE_MOVIELENGTH = 6
+    TYPE_MOVIEPOSITION = 7
+    TYPE_TIMESHIFTSTART = 8
+    TYPE_TIMESHIFTPOSITION = 9
 
     def __init__(self, type):
         Poll.__init__(self)
@@ -49,9 +49,11 @@ class Slyk18ServicePosition(Poll, Converter, object):
         args = type.split(',')
         type = args.pop(0)
 
-        self.detailed = 'Detailed' in args
-
-        if type == "Remaining":
+        if type == "Length":
+            self.type = self.TYPE_LENGTH
+        elif type == "Gauge":
+            self.type = self.TYPE_GAUGE
+        elif type == "Remaining":
             self.type = self.TYPE_REMAINING
         elif type == "Remaining2":
             self.type = self.TYPE_REMAINING2
@@ -68,7 +70,7 @@ class Slyk18ServicePosition(Poll, Converter, object):
         elif type == "TimeshiftPosition":
             self.type = self.TYPE_TIMESHIFTPOSITION
 
-        self.poll_interval = 500
+        self.poll_interval = 1000
         self.poll_enabled = True
 
     def getSeek(self):
@@ -87,6 +89,7 @@ class Slyk18ServicePosition(Poll, Converter, object):
 
     @cached
     def getLength(self):
+        print("*** getlength ***")
         seek = self.getSeek()
         if seek is None:
             return None
@@ -107,88 +110,100 @@ class Slyk18ServicePosition(Poll, Converter, object):
         if seek is None:
             return ""
 
-        if self.type == self.TYPE_TIMESHIFTSTART:
-            time = getTime()
-            length = (self.length // 90000)
-            t = localtime(time - length)
-            if int(strftime("%H", t)) >= 12:
-                timesuffix = _('pm')
-            else:
-                timesuffix = _('am')
-            if hours24:
-                d = _("%H.%M")
-            else:
-                d = _("%l.%M") + _(timesuffix)
-            timetext = strftime(d, t)
-            return timetext.lstrip(' ')
+        l = self.length  # elapsed
+        p = self.position
+        r = self.length - self.position  # Remaining
 
-        if self.type == self.TYPE_TIMESHIFTPOSITION:
-            time = getTime()
-            length = (self.length // 90000)
-            s = self.position // 90000
-            t = localtime(time - length + s)
-            if int(strftime("%H", t)) >= 12:
-                timesuffix = _('pm')
-            else:
-                timesuffix = _('am')
-            if hours24:
-                d = _("%H.%M")
-            else:
-                d = _("%l.%M") + _(timesuffix)
-            timetext = strftime(d, t)
-            return timetext.lstrip(' ')
-
-        if self.type == self.TYPE_REMAINING:
-            s = self.position // 90000
-            e = (self.length // 90000) - s
-            sign_n = ""
-            if (e / 60) > 0:
-                sign_n = "-"
-            return sign_n + ngettext(_("%d Min"), _("%d Mins"), (e // 60)) % (e // 60)
-
-        if self.type == self.TYPE_REMAINING2:
-            length = (self.length // 90000)
-            s = self.position // 90000
-            e = self.length // 90000 - s
-            sign_n = ''
-            if e % 60 > 0:
-                sign_n = '-'
-            if e // 60 < length:
-                return sign_n + _('%d Secs') % (e % 60)
-            else:
-                return sign_n + ngettext(_('%d Min'), _('%d Mins'), e // 60) % (e // 60)
-
-        if self.type == self.TYPE_POSITION:
-            p = self.position // 90000
-            sign_p = "+"
-            return sign_p + ngettext(_("%d Min"), _("%d Mins"), (p // 60)) % (p // 60)
-
-        if self.type == self.TYPE_MOVIEREMAINING:
-            s = self.position // 90000
-            e = (self.length // 90000) - s
-            return ngettext(_("%d Min"), _("%d Mins"), (e // 60)) % (e // 60)
-
-        length = self.length
-
-        if length < 0:
+        if l < 0:
             return ""
 
-        if not self.detailed:
-            length /= 90000
+        l /= 90000
+        p /= 90000
+        r /= 90000
 
-        if self.type == self.TYPE_MOVIELENGTH:
-            if length // 3600 < 1:
-                if length // 60 < 1:
-                    return _("%ds") % (length % 60)
-                else:
-                    return _("%dm") % (length // 60)
-            elif length // 60 % 60 == 0:
-                return _("%dh") % (length // 3600)
+        if l >= 0:
+            sign_l = ""
+        else:
+            l = -l
+            sign_l = "-"
+
+        if p >= 0:
+            sign_p = ""
+        else:
+            p = -p
+            sign_p = "-"
+
+        if r >= 0:
+            sign_r = ""
+        else:
+            r = -r
+            sign_r = "-"
+
+        e = l - p
+
+        if self.type == self.TYPE_POSITION:
+            return "+" + ngettext(_("%d Min"), _("%d Mins"), (p // 60)) % (p // 60)
+
+        elif self.type == self.TYPE_REMAINING:
+            return "-" + ngettext(_("%d Min"), _("%d Mins"), (e // 60)) % (e // 60)
+
+        elif self.type == self.TYPE_REMAINING2:
+            if (e // 60) >= 1:
+                return "-" + ngettext(_("%d Min"), _("%d Mins"), (e // 60)) % (e // 60)
             else:
-                return _("%dh %2dm") % (length // 3600, length // 60 % 60)
+                return "-" + _('%d Secs') % (e % 60)
 
-        if self.type == self.TYPE_MOVIEPOSITION:
-            p = self.position // 90000
+        elif self.type == self.TYPE_TIMESHIFTSTART:
+            time = getTime()
+            # length = (self.length // 90000)
+            # t = localtime(time - length)
+
+            t = localtime(time - l)
+
+            if int(strftime("%H", t)) >= 12:
+                timesuffix = _('pm')
+            else:
+                timesuffix = _('am')
+            if hours24:
+                d = _("%H.%M")
+            else:
+                d = _("%l.%M") + _(timesuffix)
+            timetext = strftime(d, t)
+            return timetext.lstrip(' ')
+
+        elif self.type == self.TYPE_TIMESHIFTPOSITION:
+            time = getTime()
+            # length = (self.length // 90000)
+            # s = self.position // 90000
+            t = localtime(time - l + p)
+            if int(strftime("%H", t)) >= 12:
+                timesuffix = _('pm')
+            else:
+                timesuffix = _('am')
+            if hours24:
+                d = _("%H.%M")
+            else:
+                d = _("%l.%M") + _(timesuffix)
+            timetext = strftime(d, t)
+            return timetext.lstrip(' ')
+
+        elif self.type == self.TYPE_MOVIEREMAINING:
+            # s = self.position // 90000
+            # e = (self.length // 90000) - s
+            return ngettext(_("%d Min"), _("%d Mins"), (e // 60)) % (e // 60)
+
+        elif self.type == self.TYPE_MOVIELENGTH:
+            if l // 3600 < 1:
+                if l // 60 < 1:
+                    return _("%ds") % (l % 60)
+                else:
+                    return _("%dm") % (l // 60)
+            elif l // 60 % 60 == 0:
+                return _("%dh") % (l // 3600)
+            else:
+                return _("%dh %2dm") % (l // 3600, l // 60 % 60)
+
+        elif self.type == self.TYPE_MOVIEPOSITION:
             if p // 3600 < 1:
                 if p // 60 < 1:
                     return _("%ds") % (p % 60)
