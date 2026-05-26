@@ -25,6 +25,7 @@ class Slyk18RemainingToText(Poll, Converter, object):
             self.poll_interval = 1000
             self.poll_enabled = True
 
+    """
     @cached
     def getText(self):
         time = self.source.time
@@ -70,5 +71,60 @@ class Slyk18RemainingToText(Poll, Converter, object):
                 return ngettext(_("Started %d min ago"), _("Started %d mins ago"), (r // 60)) % (r // 60)
         else:
             return "%d" % length
+            """
+
+    @cached
+    def getText(self):
+        source_time = self.source.time
+        if source_time is None:
+            return ""
+
+        duration = 0
+        elapsed = 0
+        remaining = 0
+        r = 0
+
+        if len(source_time) == 2:
+            duration, remaining = source_time
+
+            if remaining is not None:
+                elapsed = duration - remaining
+        elif len(source_time) >= 3:
+            duration, remaining, elapsed = source_time[:3]
+        else:
+            return ""
+
+        if remaining is not None:
+            if self.type < 7:
+                if config.usage.swap_time_remaining_on_osd.value == "0":
+                    r = remaining
+                elif config.usage.swap_time_remaining_on_osd.value == "1":
+                    r = duration - elapsed
+                elif config.usage.swap_time_remaining_on_osd.value == "2":
+                    r = elapsed
+                elif config.usage.swap_time_remaining_on_osd.value == "3":
+                    r = elapsed
+            else:
+                if config.usage.swap_time_remaining_on_vfd.value == "0":
+                    r = remaining
+                elif config.usage.swap_time_remaining_on_vfd.value == "1":
+                    r = duration - elapsed
+                elif config.usage.swap_time_remaining_on_vfd.value == "2":
+                    r = elapsed
+                elif config.usage.swap_time_remaining_on_vfd.value == "3":
+                    r = elapsed
+        else:
+            r = remaining
+
+        length = duration   # Length
+        # p = elapsed   # Position
+
+        if self.type == self.ONLY_MINUTE:
+            if r is not None:
+                return ngettext(_("Started %d min ago"), _("Started %d mins ago"), (r // 60)) % (r // 60)
+        else:
+            return "%d" % length
+
+        return ""
 
     text = property(getText)
